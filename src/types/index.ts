@@ -20,3 +20,6 @@ export type {
     BorderConfig,
     CanvasConfig
 } from './canvas'
+
+// Template types
+export type { CertificateTemplate } from './template'

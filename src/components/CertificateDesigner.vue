@@ -115,6 +115,9 @@ import { useCanvasSelection } from '../composables/useCanvasSelection'
 import { useCanvasZoom } from '../composables/useCanvasZoom'
 import { useCanvasHistory } from '../composables/useCanvasHistory'
 import { useCanvasBackground } from '../composables/useCanvasBackground'
+import { useTemplates } from '../composables/useTemplates'
+import { CANVAS_PRESETS } from '../constants/canvasPresets'
+import type { CertificateTemplate } from '../types'
 
 const props = defineProps<{
 	width?: number
@@ -239,8 +242,49 @@ const {
 	resetZoom
 } = useCanvasZoom({ min: 0.1, max: 4, step: 0.1 })
 
-const canvasWidth = computed(() => props.width ?? 800)
-const canvasHeight = computed(() => props.height ?? 600)
+const canvasWidth = vueRef(props.width ?? 800)
+const canvasHeight = vueRef(props.height ?? 600)
+
+watch(() => props.width, (val) => { if (val !== undefined) canvasWidth.value = val })
+watch(() => props.height, (val) => { if (val !== undefined) canvasHeight.value = val })
+
+// ─── Canvas Size & Placeholders ──────────────────────────────
+
+function setCanvasSize(newWidth: number, newHeight: number, scaleElements: boolean = true) {
+	const oldW = canvasWidth.value
+	const oldH = canvasHeight.value
+
+	if (scaleElements && elements.value.length > 0) {
+		const sx = newWidth / oldW
+		const sy = newHeight / oldH
+		saveSnapshot()
+		for (const el of elements.value) {
+			el.x = Math.round(el.x * sx)
+			el.y = Math.round(el.y * sy)
+			el.width = Math.round(el.width * sx)
+			el.height = Math.round(el.height * sy)
+			if (el.type === 'text') {
+				(el as any).fontSize = Math.round((el as any).fontSize * Math.min(sx, sy))
+			}
+		}
+	}
+
+	canvasWidth.value = newWidth
+	canvasHeight.value = newHeight
+}
+
+function fillPlaceholders(data: Record<string, string>) {
+	saveSnapshot()
+	for (const el of elements.value) {
+		if (el.type === 'text') {
+			let text = (el as any).text as string
+			for (const [key, value] of Object.entries(data)) {
+				text = text.replace(new RegExp(`\\{${key}\\}`, 'g'), value)
+			}
+			(el as any).text = text
+		}
+	}
+}
 
 // ─── Background & Border ─────────────────────────────────────
 const {
@@ -521,6 +565,30 @@ function loadFromJSON(json: string) {
 	if (data.border) setBorder(data.border)
 	saveSnapshot()
 	elements.value = data.elements || []
+	deselect()
+	clearHistory()
+}
+
+// ─── Templates ──────────────────────────────────────────────
+const {
+	templates,
+	getTemplate,
+	registerTemplate,
+	removeTemplate
+} = useTemplates()
+
+function loadTemplate(templateOrId: string | CertificateTemplate) {
+	const tmpl = typeof templateOrId === 'string'
+		? getTemplate(templateOrId)
+		: templateOrId
+	if (!tmpl) {
+		console.warn(`Template not found: ${templateOrId}`)
+		return
+	}
+	setBackground(tmpl.background)
+	setBorder(tmpl.border)
+	saveSnapshot()
+	elements.value = JSON.parse(JSON.stringify(tmpl.elements))
 	deselect()
 	clearHistory()
 }
@@ -810,7 +878,19 @@ defineExpose({
 	// Export
 	exportToPNG,
 	exportToJSON,
-	loadFromJSON
+	loadFromJSON,
+	// Templates
+	templates,
+	loadTemplate,
+	registerTemplate,
+	removeTemplate,
+	// Canvas size
+	canvasWidth,
+	canvasHeight,
+	setCanvasSize,
+	CANVAS_PRESETS,
+	// Placeholders
+	fillPlaceholders
 })
 </script>
 
