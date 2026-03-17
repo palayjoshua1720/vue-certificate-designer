@@ -2,6 +2,8 @@
 
 A Vue 3 + Konva library for building interactive, drag-and-drop certificate designers with templates, image clipping, export, and dynamic placeholders.
 
+**[Live Demo](https://vue-certificate-designer-demo.vercel.app/)**
+
 ## Features
 
 - **Canvas Editor** — Drag, resize, rotate text, shapes, and images on an interactive Konva canvas
@@ -15,7 +17,7 @@ A Vue 3 + Konva library for building interactive, drag-and-drop certificate desi
 - **Grid Lines** — Toggleable grid overlay for precise alignment
 - **History** — Undo/redo with keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z)
 - **Layer Ordering** — Bring forward/backward, send to front/back
-- **Export** — PNG (2x resolution) and JSON (full state serialization with load)
+- **Export** — High-res PNG and PDF support, plus JSON (full state serialization with load)
 
 ## Installation
 
@@ -26,7 +28,7 @@ npm install @juswap/certificate-designer
 ### Peer Dependencies
 
 ```bash
-npm install vue vue-konva konva
+npm install vue vue-konva konva jspdf
 ```
 
 ## Setup
@@ -248,6 +250,7 @@ designer.value.addElement(
 
 ### Export
 - `exportToPNG()` — Returns data URL (2x resolution, clean export)
+- `exportToPDF(options?)` — Generates and downloads a high-quality PDF
 - `exportToJSON()` — Returns JSON string (full state)
 - `loadFromJSON(json)` — Restore from JSON
 

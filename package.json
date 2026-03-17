@@ -34,17 +34,23 @@
 		"dist"
 	],
 	"peerDependencies": {
+		"jspdf": "^4.2.0",
+		"konva": "^10.2.0",
 		"vue": "^3.0.0",
-		"vue-konva": "^3.3.0",
-		"konva": "^10.2.0"
+		"vue-konva": "^3.3.0"
+	},
+	"peerDependenciesMeta": {
+		"jspdf": {
+			"optional": true
+		}
 	},
 	"scripts": {
 		"dev": "vite",
 		"build": "vue-tsc -b && vite build",
 		"preview": "vite preview"
 	},
-	"dependencies": {},
 	"devDependencies": {
+		"jspdf": "^4.2.0",
 		"@types/node": "^24.10.1",
 		"@vitejs/plugin-vue": "^6.0.2",
 		"@vue/tsconfig": "^0.8.1",

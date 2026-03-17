@@ -11,7 +11,7 @@ export default defineConfig({
 			tsconfigPath: path.resolve(__dirname, 'tsconfig.json'),
 			include: ['src/**/*.ts', 'src/**/*.vue'],
 			exclude: ['src/**/*.stories.ts', 'src/**/*.test.ts'],
-			// rollupTypes: true,
+			rollupTypes: true,
       		// skipDiagnostics: false,
 		}),
 	],

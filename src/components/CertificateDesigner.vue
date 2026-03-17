@@ -32,6 +32,8 @@
 						v-if="el.type === 'text'"
 						:ref="(node: any) => setNodeRef(el.id, node)"
 						:config="getTextConfig(el)"
+						:visible="el.visible !== false"
+						:draggable="!el.locked"
 						@click="onElementClick(el.id, $event)"
 						@tap="onElementClick(el.id, $event)"
 						@dragstart="onDragStart(el.id, $event)"
@@ -44,6 +46,8 @@
 						v-else-if="el.type === 'shape' && el.shapeType === 'rect'"
 						:ref="(node: any) => setNodeRef(el.id, node)"
 						:config="getShapeConfig(el)"
+						:visible="el.visible !== false"
+						:draggable="!el.locked"
 						@click="onElementClick(el.id, $event)"
 						@tap="onElementClick(el.id, $event)"
 						@dragstart="onDragStart(el.id, $event)"
@@ -56,6 +60,8 @@
 						v-else-if="el.type === 'shape' && el.shapeType === 'circle'"
 						:ref="(node: any) => setNodeRef(el.id, node)"
 						:config="getCircleConfig(el)"
+						:visible="el.visible !== false"
+						:draggable="!el.locked"
 						@click="onElementClick(el.id, $event)"
 						@tap="onElementClick(el.id, $event)"
 						@dragstart="onDragStart(el.id, $event)"
@@ -68,6 +74,8 @@
 						v-else-if="el.type === 'image' && imageCache.get(el.id)"
 						:ref="(node: any) => setNodeRef(el.id, node)"
 						:config="getImageGroupConfig(el)"
+						:visible="el.visible !== false"
+						:draggable="!el.locked"
 						@click="onElementClick(el.id, $event)"
 						@tap="onElementClick(el.id, $event)"
 						@dragstart="onDragStart(el.id, $event)"
@@ -116,6 +124,7 @@ import { useCanvasZoom } from '../composables/useCanvasZoom'
 import { useCanvasHistory } from '../composables/useCanvasHistory'
 import { useCanvasBackground } from '../composables/useCanvasBackground'
 import { useTemplates } from '../composables/useTemplates'
+import { useCanvasClipboard } from '../composables/useCanvasClipboard'
 import { CANVAS_PRESETS } from '../constants/canvasPresets'
 import type { CertificateTemplate } from '../types'
 
@@ -230,6 +239,69 @@ function updateSelectedElement(updates: Partial<CanvasElement>) {
 	if (selectedElementId.value) {
 		updateElement(selectedElementId.value, updates)
 	}
+}
+
+// ─── Clipboard (Copy/Paste) ──────────────────────────────────
+const { copy: _copy, hasClipboard, getPastedElement } = useCanvasClipboard()
+
+function copy() {
+	if (selectedElement.value) {
+		_copy(selectedElement.value)
+	}
+}
+
+function paste() {
+	if (!hasClipboard()) return
+	const clonedEl = getPastedElement()
+	if (clonedEl) {
+		addElement(clonedEl)
+		select(clonedEl.id) // Select the newly pasted element
+	}
+}
+
+function duplicate() {
+	if (!selectedElement.value) return
+	_copy(selectedElement.value)
+	paste()
+}
+
+// ─── Alignment ───────────────────────────────────────────────
+function alignElement(id: string, position: 'center' | 'center-h' | 'center-v' | 'left' | 'right' | 'top' | 'bottom') {
+	const el = getElementById(id)
+	if (!el) return
+	
+	const updates: Partial<CanvasElement> = {}
+	
+	// Handle shape dimensions context
+	const width = (el.type === 'shape' && (el as any).shapeType === 'circle') ? (el as any).radius * 2 : el.width
+	const height = (el.type === 'shape' && (el as any).shapeType === 'circle') ? (el as any).radius * 2 : el.height
+
+	switch (position) {
+		case 'center':
+			updates.x = (canvasWidth.value - width) / 2
+			updates.y = (canvasHeight.value - height) / 2
+			break
+		case 'center-h':
+			updates.x = (canvasWidth.value - width) / 2
+			break
+		case 'center-v':
+			updates.y = (canvasHeight.value - height) / 2
+			break
+		case 'left':
+			updates.x = 0
+			break
+		case 'right':
+			updates.x = canvasWidth.value - width
+			break
+		case 'top':
+			updates.y = 0
+			break
+		case 'bottom':
+			updates.y = canvasHeight.value - height
+			break
+	}
+	
+	updateElement(id, updates)
 }
 
 // ─── Zoom ────────────────────────────────────────────────────
@@ -461,6 +533,8 @@ function getImageGroupConfig(el: ImageElement) {
 	const config: any = {
 		x: el.x,
 		y: el.y,
+		width: el.width,
+		height: el.height,
 		rotation: el.rotation,
 		opacity: el.opacity,
 		visible: el.visible,
@@ -544,6 +618,40 @@ async function exportToPNG(): Promise<string> {
 	}
 
 	return dataUrl
+}
+
+async function exportToPDF(options?: { filename?: string }): Promise<void> {
+	try {
+        let jsPDF;
+        try {
+            const module = await import('jspdf')
+            jsPDF = module.jsPDF || module.default
+        } catch (err) {
+            console.error('To export to PDF, you must install jspdf: npm install jspdf')
+            throw new Error('jspdf not installed')
+        }
+
+		// Get the high-res PNG first (same logic as exportToPNG)
+		const dataUrl = await exportToPNG()
+		
+		const w = canvasWidth.value
+		const h = canvasHeight.value
+		const orientation = w > h ? 'l' : 'p'
+		
+		// Create jsPDF instance matching canvas dimensions (in pixels/points)
+		const doc = new jsPDF({
+			orientation,
+			unit: 'px',
+			format: [w, h]
+		})
+		
+		// Add image to cover the entire PDF page
+		doc.addImage(dataUrl, 'PNG', 0, 0, w, h)
+		doc.save(options?.filename || 'certificate.pdf')
+	} catch (e) {
+		console.error('Failed to export PDF:', e)
+		throw e
+	}
 }
 
 function exportToJSON(): string {
@@ -681,6 +789,31 @@ function onKeydown(e: KeyboardEvent) {
 		removeElement(selectedElementId.value)
 		deselect()
 		emit('element-selected', null)
+		return
+	}
+
+	// Copy: Ctrl+C
+	if (isCtrl && (e.key === 'c' || e.key === 'C')) {
+		if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return
+		e.preventDefault()
+		copy()
+		return
+	}
+
+	// Paste: Ctrl+V
+	if (isCtrl && (e.key === 'v' || e.key === 'V')) {
+		if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return
+		e.preventDefault()
+		paste()
+		return
+	}
+
+	// Duplicate: Ctrl+D
+	if (isCtrl && (e.key === 'd' || e.key === 'D')) {
+		e.preventDefault() // prevent browser bookmark shortcut
+		if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return
+		duplicate()
+		return
 	}
 }
 
@@ -693,10 +826,12 @@ watch(selectedElementId, async (newId) => {
 	if (newId) {
 		const vueNode = nodeRefs.get(newId)
 		const konvaNode = vueNode?.getNode?.()
-		if (konvaNode) {
+		const el = getElementById(newId)
+		
+		if (konvaNode && el && !el.locked && el.visible !== false) {
 			transformer.nodes([konvaNode])
 		} else {
-			transformer.nodes([])
+			transformer.nodes([]) // Detach if element is locked or hidden
 		}
 	} else {
 		transformer.nodes([])
@@ -802,26 +937,42 @@ function onTransformEnd(id: string, e: any) {
 	}
 
 	const el = getElementById(id)
-	if (el && el.type === 'shape') {
+	if (!el) return
+
+	if (el.type === 'shape') {
 		updates.width = Math.max(10, node.width() * scaleX)
 		updates.height = Math.max(10, node.height() * scaleY)
-		node.scaleX(1)
-		node.scaleY(1)
-	}
-
-	if (el && el.type === 'text') {
+		
+		node.width(updates.width)
+		node.height(updates.height)
+		if (el.shapeType === 'circle') {
+			node.setAttr('radius', Math.min(updates.width, updates.height) / 2)
+		}
+	} else if (el.type === 'image') {
+		// Images are wrapped in a v-group, we need to correctly scale the logical width/height
+		updates.width = Math.max(10, el.width * scaleX)
+		updates.height = Math.max(10, el.height * scaleY)
+		
+		node.width(updates.width)
+		node.height(updates.height)
+		
+		// Synchronously update the child image node's dimensions as well
+		const imageNode = node.findOne('Image')
+		if (imageNode) {
+			imageNode.width(updates.width)
+			imageNode.height(updates.height)
+		}
+	} else if (el.type === 'text') {
 		updates.width = Math.max(10, node.width() * scaleX)
 		;(updates as Partial<TextElement>).fontSize = Math.max(8, el.fontSize * scaleY)
-		node.scaleX(1)
-		node.scaleY(1)
+		
+		node.width(updates.width)
+		node.setAttr('fontSize', (updates as Partial<TextElement>).fontSize)
 	}
 
-	if (el && el.type === 'image') {
-		updates.width = Math.max(10, node.width() * scaleX)
-		updates.height = Math.max(10, node.height() * scaleY)
-		node.scaleX(1)
-		node.scaleY(1)
-	}
+	// Always reset the Konva node scale to 1 since we are baking the scale into width/height/fontSize
+	node.scaleX(1)
+	node.scaleY(1)
 
 	_updateElement(id, updates)
 }
@@ -840,6 +991,12 @@ defineExpose({
 	deselect,
 	isSelected,
 	updateSelectedElement,
+	// Clipboard & Align
+	copy,
+	paste,
+	duplicate,
+	hasClipboard,
+	alignElement,
 	// Zoom
 	zoomLevel,
 	zoomPercent,
@@ -878,6 +1035,7 @@ defineExpose({
 	// Export
 	exportToPNG,
 	exportToJSON,
+	exportToPDF,
 	loadFromJSON,
 	// Templates
 	templates,
